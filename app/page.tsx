@@ -1,6 +1,6 @@
 'use client';
 
-import { Canvas, useFrame, ThreeElements } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
@@ -14,16 +14,42 @@ function JumpingCube() {
   const hoverAmplitude = 0.1;
   const hoverFrequency = 2;
 
+  const handleJump = () => {
+    if (!isJumping) {
+      setIsJumping(true);
+      setJumpVelocity(jumpForce);
+    }
+  };
+
   useEffect(() => {
+    // Handle keyboard events
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Space' && !isJumping) {
-        setIsJumping(true);
-        setJumpVelocity(jumpForce);
+      if (event.code === 'Space') {
+        handleJump();
       }
     };
 
+    // Handle touch events
+    const handleTouch = (event: TouchEvent) => {
+      event.preventDefault();
+      handleJump();
+    };
+
+    // Handle mouse events
+    const handleClick = (event: MouseEvent) => {
+      event.preventDefault();
+      handleJump();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('touchstart', handleTouch);
+    window.addEventListener('click', handleClick);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('touchstart', handleTouch);
+      window.removeEventListener('click', handleClick);
+    };
   }, [isJumping]);
 
   useFrame((state, delta) => {
@@ -54,7 +80,7 @@ function JumpingCube() {
 
 export default function Page() {
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
+    <div style={{ width: '100vw', height: '100vh', touchAction: 'none' }}>
       <Canvas 
         style={{ background: '#111' }}
         camera={{ position: [0, 2, 5], fov: 75 }}
