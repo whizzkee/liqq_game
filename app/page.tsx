@@ -257,6 +257,24 @@ export default function Page() {
     setStarted(false);
   };
 
+  useEffect(() => {
+    const gameContainer = document.getElementById('game-container');
+    if (!gameContainer) return;
+
+    const handleTouch = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!started && !showWelcome) {
+        handleStart();
+      }
+    };
+
+    gameContainer.addEventListener('touchstart', handleTouch, { passive: false });
+
+    return () => {
+      gameContainer.removeEventListener('touchstart', handleTouch);
+    };
+  }, [started, showWelcome]);
+
   return (
     <div id="game-container">
       <div className="canvas-container">
