@@ -16,8 +16,8 @@ const PIPE_WIDTH = 1;
 const PIPE_GAP = 5;    // Size of gap between top and bottom pipes
 const PIPE_SPACING = 7;
 const GAME_SPEED = 0.05;
-const GRAVITY = 0.4;
-const FLAP_FORCE = 5;
+const GRAVITY = 0.25;  // Reduced from 0.3
+const FLAP_FORCE = 4.5;  // Adjusted for smoother movement
 const INITIAL_PIPE_COUNT = 3;
 
 function Liqq({ position }: { position: [number, number, number] }) {
@@ -60,7 +60,11 @@ function GameScene({ onScoreChange, started, onGameOver }: {
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [pipes, setPipes] = useState<Pipe[]>([]);
+  const [lastTouchTime, setLastTouchTime] = useState(0);
   const lastUpdateTimeRef = useRef(0);
+
+  // Touch cooldown to prevent rapid-fire touches
+  const TOUCH_COOLDOWN = 100; // milliseconds
 
   const generatePipe = (x: number) => ({
     id: Math.random(),
@@ -88,37 +92,53 @@ function GameScene({ onScoreChange, started, onGameOver }: {
   }, [started]);
 
   useEffect(() => {
-    const handleInput = (e: KeyboardEvent | MouseEvent | TouchEvent) => {
-      if (e instanceof KeyboardEvent && e.code !== 'Space') return;
+    const handleTouch = (e: TouchEvent) => {
       e.preventDefault();
+      const now = Date.now();
+      if (now - lastTouchTime < TOUCH_COOLDOWN) return;
       
-      if (!gameOver) {
+      if (started && !gameOver) {
         setVelocity(FLAP_FORCE);
+        setLastTouchTime(now);
       }
     };
 
-    if (started) {
-      window.addEventListener('keydown', handleInput);
-      window.addEventListener('mousedown', handleInput);
-      window.addEventListener('touchstart', handleInput);
-    }
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && started && !gameOver) {
+        e.preventDefault();
+        const now = Date.now();
+        if (now - lastTouchTime < TOUCH_COOLDOWN) return;
+        
+        setVelocity(FLAP_FORCE);
+        setLastTouchTime(now);
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouch, { passive: false });
+    window.addEventListener('keydown', handleKeyPress);
 
     return () => {
-      window.removeEventListener('keydown', handleInput);
-      window.removeEventListener('mousedown', handleInput);
-      window.removeEventListener('touchstart', handleInput);
+      window.removeEventListener('touchstart', handleTouch);
+      window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [gameOver, started]);
+  }, [started, gameOver, lastTouchTime]);
 
   useFrame((_, delta) => {
     if (!liqqRef.current || !started || gameOver) return;
 
-    // Update liqq physics
-    const newVelocity = velocity - GRAVITY * delta * 60;
+    // Update liqq physics with smoother delta-time handling
+    const frameRate = 1 / delta;
+    const targetFrameRate = 60;
+    const frameRateAdjustment = targetFrameRate / frameRate;
+    
+    const newVelocity = velocity - (GRAVITY * delta * 60 * frameRateAdjustment);
     setVelocity(newVelocity);
     
-    const newY = liqqRef.current.position.y + newVelocity * delta;
+    const newY = liqqRef.current.position.y + (newVelocity * delta * frameRateAdjustment);
     liqqRef.current.position.y = newY;
+
+    // Add slight rotation based on velocity for visual feedback
+    liqqRef.current.rotation.z = Math.max(Math.min(newVelocity * 0.1, Math.PI / 4), -Math.PI / 4);
 
     // Check boundary collisions
     if (newY < -10 || newY > 10) {
