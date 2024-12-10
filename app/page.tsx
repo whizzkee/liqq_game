@@ -114,12 +114,25 @@ function GameScene({ onScoreChange, started, onGameOver }: {
       }
     };
 
+    const handleClick = (e: MouseEvent) => {
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastTouchTime < TOUCH_COOLDOWN) return;
+      
+      if (started && !gameOver) {
+        setVelocity(FLAP_FORCE);
+        setLastTouchTime(now);
+      }
+    };
+
     window.addEventListener('touchstart', handleTouch, { passive: false });
     window.addEventListener('keydown', handleKeyPress);
+    window.addEventListener('click', handleClick);
 
     return () => {
       window.removeEventListener('touchstart', handleTouch);
       window.removeEventListener('keydown', handleKeyPress);
+      window.removeEventListener('click', handleClick);
     };
   }, [started, gameOver, lastTouchTime]);
 
