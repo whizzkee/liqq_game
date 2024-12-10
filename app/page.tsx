@@ -61,103 +61,124 @@ function GameScene({ onScoreChange, started, onGameOver }: {
   const [score, setScore] = useState(0);
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [lastTouchTime, setLastTouchTime] = useState(0);
+  const [touchActive, setTouchActive] = useState(false);
   const lastUpdateTimeRef = useRef(0);
+  const frameTimeRef = useRef(0);
+  const touchPositionRef = useRef({ x: 0, y: 0 });
 
-  // Touch cooldown to prevent rapid-fire touches
-  const TOUCH_COOLDOWN = 100; // milliseconds
+  // Haptic feedback patterns
+  const HAPTIC_PATTERNS = {
+    tap: [10], // Short tap
+    score: [8, 30, 8], // Double pulse
+    gameOver: [20, 40, 60] // Increasing intensity
+  };
 
-  const generatePipe = (x: number) => ({
-    id: Math.random(),
-    x,
-    gapY: Math.random() * 6 - 3,  // Random gap position between -3 and 3
-    scored: false
-  });
-
-  const resetGame = () => {
-    setGameOver(false);
-    setScore(0);
-    setVelocity(0);
-    if (liqqRef.current) {
-      liqqRef.current.position.y = 0;
+  const triggerHapticFeedback = (pattern: number[]) => {
+    try {
+      // Check if vibration is supported
+      if ('vibrate' in navigator) {
+        navigator.vibrate(pattern);
+      }
+    } catch (error) {
+      // Silently fail if vibration is not supported or fails
+      console.debug('Haptic feedback not supported');
     }
-    const initialPipes = Array.from({ length: INITIAL_PIPE_COUNT }, (_, i) => 
-      generatePipe(5 + i * PIPE_SPACING)
-    );
-    setPipes(initialPipes);
-    onScoreChange(0);
+  };
+
+  const handleFlap = (e: TouchEvent | MouseEvent | KeyboardEvent) => {
+    if (started && !gameOver) {
+      // Immediate velocity set for responsive jumps
+      setVelocity(FLAP_FORCE);
+      setTouchActive(true);
+      
+      // Trigger haptic feedback for flap
+      triggerHapticFeedback(HAPTIC_PATTERNS.tap);
+      
+      // Reset touch active state after animation frame
+      requestAnimationFrame(() => {
+        setTouchActive(false);
+      });
+    }
   };
 
   useEffect(() => {
-    resetGame();
-  }, [started]);
-
-  useEffect(() => {
-    const handleTouch = (e: TouchEvent) => {
+    const handleTouchStart = (e: TouchEvent) => {
       e.preventDefault();
-      const now = Date.now();
-      if (now - lastTouchTime < TOUCH_COOLDOWN) return;
+      if (e.touches.length !== 1) return; // Only handle single touches
       
-      if (started && !gameOver) {
-        setVelocity(FLAP_FORCE);
-        setLastTouchTime(now);
-      }
+      const touch = e.touches[0];
+      touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+      handleFlap(e);
+    };
+
+    const handleTouchEnd = () => {
+      setTouchActive(false);
     };
 
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.code === 'Space' && started && !gameOver) {
         e.preventDefault();
-        const now = Date.now();
-        if (now - lastTouchTime < TOUCH_COOLDOWN) return;
-        
-        setVelocity(FLAP_FORCE);
-        setLastTouchTime(now);
+        handleFlap(e);
       }
     };
 
     const handleClick = (e: MouseEvent) => {
       e.preventDefault();
-      const now = Date.now();
-      if (now - lastTouchTime < TOUCH_COOLDOWN) return;
-      
-      if (started && !gameOver) {
-        setVelocity(FLAP_FORCE);
-        setLastTouchTime(now);
-      }
+      handleFlap(e);
     };
 
-    window.addEventListener('touchstart', handleTouch, { passive: false });
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
     window.addEventListener('keydown', handleKeyPress);
     window.addEventListener('click', handleClick);
 
     return () => {
-      window.removeEventListener('touchstart', handleTouch);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('keydown', handleKeyPress);
       window.removeEventListener('click', handleClick);
     };
-  }, [started, gameOver, lastTouchTime]);
+  }, [started, gameOver]);
 
   useFrame((_, delta) => {
     if (!liqqRef.current || !started || gameOver) return;
 
-    // Update liqq physics with smoother delta-time handling
+    // Track frame time for performance optimization
+    const now = performance.now();
+    frameTimeRef.current = now - lastUpdateTimeRef.current;
+    lastUpdateTimeRef.current = now;
+
+    // Optimized physics calculations with frame time compensation
     const frameRate = 1 / delta;
     const targetFrameRate = 60;
-    const frameRateAdjustment = targetFrameRate / frameRate;
+    const frameRateAdjustment = Math.min(2, Math.max(0.5, targetFrameRate / frameRate));
     
+    // Simplified gravity calculation without touch-based adjustment
     const newVelocity = velocity - (GRAVITY * delta * 60 * frameRateAdjustment);
     setVelocity(newVelocity);
     
-    const newY = liqqRef.current.position.y + (newVelocity * delta * frameRateAdjustment);
+    const positionDelta = newVelocity * delta * frameRateAdjustment;
+    const newY = liqqRef.current.position.y + positionDelta;
     liqqRef.current.position.y = newY;
 
-    // Add slight rotation based on velocity for visual feedback
-    liqqRef.current.rotation.z = Math.max(Math.min(newVelocity * 0.1, Math.PI / 4), -Math.PI / 4);
+    // Smoother rotation with touch feedback
+    const targetRotation = touchActive ? 
+      Math.PI / 6 : // Slight upward rotation when touch is active
+      Math.max(Math.min(newVelocity * 0.1, Math.PI / 4), -Math.PI / 4);
+    
+    liqqRef.current.rotation.z = THREE.MathUtils.lerp(
+      liqqRef.current.rotation.z,
+      targetRotation,
+      delta * 10
+    );
 
     // Check boundary collisions
     if (newY < -10 || newY > 10) {
       if (!gameOver) {
         setGameOver(true);
         onGameOver();
+        // Trigger game over haptic feedback
+        triggerHapticFeedback(HAPTIC_PATTERNS.gameOver);
       }
       return;
     }
@@ -175,6 +196,8 @@ function GameScene({ onScoreChange, started, onGameOver }: {
           if (!gameOver) {
             setGameOver(true);
             onGameOver();
+            // Trigger game over haptic feedback
+            triggerHapticFeedback(HAPTIC_PATTERNS.gameOver);
           }
           return;
         }
@@ -186,6 +209,8 @@ function GameScene({ onScoreChange, started, onGameOver }: {
         setScore(newScore);
         onScoreChange(newScore);
         pipe.scored = true;
+        // Trigger score haptic feedback
+        triggerHapticFeedback(HAPTIC_PATTERNS.score);
       }
     }
 
@@ -212,6 +237,31 @@ function GameScene({ onScoreChange, started, onGameOver }: {
       lastUpdateTimeRef.current = currentTime;
     }
   });
+
+  const generatePipe = (x: number) => ({
+    id: Math.random(),
+    x,
+    gapY: Math.random() * 6 - 3,  // Random gap position between -3 and 3
+    scored: false
+  });
+
+  const resetGame = () => {
+    setGameOver(false);
+    setScore(0);
+    setVelocity(0);
+    if (liqqRef.current) {
+      liqqRef.current.position.y = 0;
+    }
+    const initialPipes = Array.from({ length: INITIAL_PIPE_COUNT }, (_, i) => 
+      generatePipe(5 + i * PIPE_SPACING)
+    );
+    setPipes(initialPipes);
+    onScoreChange(0);
+  };
+
+  useEffect(() => {
+    resetGame();
+  }, [started]);
 
   return (
     <>
@@ -244,7 +294,7 @@ export default function Page() {
     // Hide welcome screen after 3 seconds
     const timer = setTimeout(() => {
       setShowWelcome(false);
-    }, 3000);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, []);
