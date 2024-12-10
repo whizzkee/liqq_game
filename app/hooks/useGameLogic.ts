@@ -11,13 +11,13 @@ export function useGameLogic(started: boolean, onGameOver: () => void) {
   const lastUpdateTimeRef = useRef(0);
   const frameTimeRef = useRef(0);
   const touchPositionRef = useRef({ x: 0, y: 0 });
-  const rafRef = useRef<number>();
-  const touchStartTimeRef = useRef(0);
-  
-  // Use a ref for tracking the last flap time to avoid re-renders
-  const lastFlapTimeRef = useRef(0);
-  // Minimum time between flaps (16ms is roughly one frame)
-  const MIN_FLAP_INTERVAL = 16;
+  const velocityRef = useRef(0);
+
+  // Immediate velocity update without state
+  const updateVelocity = (newVelocity: number) => {
+    velocityRef.current = newVelocity;
+    setVelocity(newVelocity);
+  };
 
   const triggerHapticFeedback = useCallback((pattern: number[]) => {
     try {
@@ -32,92 +32,49 @@ export function useGameLogic(started: boolean, onGameOver: () => void) {
   const handleFlap = useCallback((e: TouchEvent | MouseEvent | KeyboardEvent) => {
     if (!started || gameOver) return;
 
-    const now = performance.now();
-    // Ensure minimum time between flaps to prevent event spamming
-    if (now - lastFlapTimeRef.current < MIN_FLAP_INTERVAL) return;
-    lastFlapTimeRef.current = now;
-
-    // Cancel any pending RAF to prevent queued updates
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-    }
-
-    // Immediate state updates for responsiveness
-    setVelocity(FLAP_FORCE);
+    // Immediate velocity update
+    updateVelocity(FLAP_FORCE);
     setTouchActive(true);
     triggerHapticFeedback(HAPTIC_PATTERNS.tap);
 
-    // Use RAF for touch state reset to ensure smooth animation
-    rafRef.current = requestAnimationFrame(() => {
-      setTouchActive(false);
-      rafRef.current = undefined;
-    });
+    // Immediate touch state reset
+    setTimeout(() => setTouchActive(false), 16);
   }, [started, gameOver, triggerHapticFeedback]);
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (!started || gameOver) return;
+    
     e.preventDefault();
     e.stopPropagation();
     
     // Only handle single touches
     if (e.touches.length !== 1) return;
     
-    const touch = e.touches[0];
-    touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
-    touchStartTimeRef.current = performance.now();
-    
     handleFlap(e);
-  }, [handleFlap]);
+  }, [handleFlap, started, gameOver]);
 
   const handleTouchEnd = useCallback(() => {
     setTouchActive(false);
-    touchStartTimeRef.current = 0;
-  }, []);
-
-  const handleKeyPress = useCallback((e: KeyboardEvent) => {
-    if (e.code === 'Space' && started && !gameOver) {
-      e.preventDefault();
-      handleFlap(e);
-    }
-  }, [started, gameOver, handleFlap]);
-
-  const handleClick = useCallback((e: MouseEvent) => {
-    e.preventDefault();
-    handleFlap(e);
-  }, [handleFlap]);
-
-  useEffect(() => {
-    // Clean up any pending animations on unmount
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    };
   }, []);
 
   useEffect(() => {
-    // Add touch events with passive: false for better touch response
+    // Use passive: false for better touch response
     window.addEventListener('touchstart', handleTouchStart, { 
       passive: false,
-      capture: true // Use capture phase for earlier handling
+      capture: true 
     });
     window.addEventListener('touchend', handleTouchEnd, { capture: true });
-    window.addEventListener('keydown', handleKeyPress);
-    window.addEventListener('click', handleClick);
 
     return () => {
       window.removeEventListener('touchstart', handleTouchStart, { capture: true });
       window.removeEventListener('touchend', handleTouchEnd, { capture: true });
-      window.removeEventListener('keydown', handleKeyPress);
-      window.removeEventListener('click', handleClick);
     };
-  }, [handleTouchStart, handleTouchEnd, handleKeyPress, handleClick]);
+  }, [handleTouchStart, handleTouchEnd]);
 
   const resetGame = useCallback(() => {
     setGameOver(false);
-    setVelocity(0);
+    updateVelocity(0);
     setTouchActive(false);
-    lastFlapTimeRef.current = 0;
-    touchStartTimeRef.current = 0;
     
     const initialPipes = Array.from({ length: INITIAL_PIPE_COUNT }, (_, i) => 
       generatePipe(5 + i * PIPE_SPACING)
@@ -130,8 +87,8 @@ export function useGameLogic(started: boolean, onGameOver: () => void) {
   }, [started, resetGame]);
 
   return {
-    velocity,
-    setVelocity,
+    velocity: velocityRef.current,
+    setVelocity: updateVelocity,
     gameOver,
     setGameOver,
     touchActive,

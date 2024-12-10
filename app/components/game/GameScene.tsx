@@ -52,34 +52,21 @@ export function GameScene({ onScoreChange, started, onGameOver }: GameSceneProps
   useFrame((_, delta) => {
     if (!liqqRef.current || !started || gameOver) return;
 
-    // Fixed timestep accumulator for consistent physics
-    const currentTime = performance.now();
-    const frameTime = Math.min(currentTime - lastFrameTime.current, 100);
-    lastFrameTime.current = currentTime;
+    // Simple physics update for better responsiveness
+    const fixedDelta = Math.min(delta, 1/30); // Cap delta time
     
-    accumulatedTime.current += frameTime;
-
-    // Update physics with fixed timestep
-    while (accumulatedTime.current >= FIXED_TIME_STEP) {
-      const fixedDelta = FIXED_TIME_STEP / 1000;
-      
-      // Physics update with fixed timestep
-      const newVelocity = velocity - (GRAVITY * fixedDelta * 60);
-      setVelocity(newVelocity);
-      
-      const positionDelta = newVelocity * fixedDelta;
-      if (liqqRef.current) {
-        liqqRef.current.position.y += positionDelta;
-      }
-
-      accumulatedTime.current -= FIXED_TIME_STEP;
-    }
-
-    // Smooth rotation interpolation
+    // Physics update
+    const newVelocity = velocity - (GRAVITY * fixedDelta * 60);
+    setVelocity(newVelocity);
+    
+    // Update position
     if (liqqRef.current) {
+      liqqRef.current.position.y += newVelocity * fixedDelta;
+
+      // Smooth rotation interpolation
       const targetRotation = touchActive ? 
         Math.PI / 6 : 
-        Math.max(Math.min(velocity * 0.1, Math.PI / 4), -Math.PI / 4);
+        Math.max(Math.min(newVelocity * 0.1, Math.PI / 4), -Math.PI / 4);
       
       liqqRef.current.rotation.z = THREE.MathUtils.lerp(
         liqqRef.current.rotation.z,
@@ -124,7 +111,7 @@ export function GameScene({ onScoreChange, started, onGameOver }: GameSceneProps
     }
 
     // Update pipes with delta time
-    movePipes(delta);
+    movePipes(fixedDelta);
   });
 
   // Memoize scene elements
