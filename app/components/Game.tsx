@@ -24,7 +24,7 @@ class MainScene extends Phaser.Scene {
     const { width, height } = this.scale;
     
     // Create repeating gradient background
-    const gradientTexture = this.createGradientTexture();
+    this.createGradientTexture();
     this.background = this.add.tileSprite(0, 0, width, height, 'gradient');
     this.background.setOrigin(0, 0);
     
@@ -87,7 +87,7 @@ class MainScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     const deltaSeconds = delta / 1000;
-    const { width, height } = this.scale;
+    const { height } = this.scale;
 
     // Scroll background
     this.background.tilePositionX += this.moveSpeed * deltaSeconds;
