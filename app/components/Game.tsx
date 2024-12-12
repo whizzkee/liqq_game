@@ -102,7 +102,6 @@ class MainScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const groundY = height * this.GROUND_LEVEL;
     const ceilingY = height * this.CEILING_LEVEL;
-    const playAreaHeight = groundY - ceilingY;
 
     // Calculate random gap position and ensure it's within bounds
     const minGapY = ceilingY + this.MIN_GAP_SIZE / 2;
