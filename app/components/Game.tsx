@@ -16,6 +16,8 @@ class MainScene extends Phaser.Scene {
   private moveSpeed: number = 200;
   private gameStarted: boolean = false;
   private startText!: Phaser.GameObjects.Text;
+  private scoreText!: Phaser.GameObjects.Text;
+  private score: number = 0;
   private hoverOffset: number = 0;
   private readonly HOVER_SPEED: number = 2;
   private readonly HOVER_AMPLITUDE: number = 20;
@@ -48,6 +50,13 @@ class MainScene extends Phaser.Scene {
     ground.setOrigin(0.5, 0);
     const ceiling = this.add.rectangle(width / 2, height * this.CEILING_LEVEL, width, 2, 0x666666);
     ceiling.setOrigin(0.5, 1);
+
+    // Add score text
+    this.scoreText = this.add.text(width / 2, height * 0.1, '0', {
+      fontSize: '32px',
+      color: '#ffffff',
+    }).setOrigin(0.5);
+    this.scoreText.setDepth(1); // Ensure score stays on top
 
     // Add start text
     this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
@@ -140,6 +149,11 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  updateScore() {
+    this.score += 1;
+    this.scoreText.setText(this.score.toString());
+  }
+
   fly() {
     if (!this.gameStarted) {
       this.gameStarted = true;
@@ -151,6 +165,32 @@ class MainScene extends Phaser.Scene {
 
   stopFlying() {
     this.isFlying = false;
+  }
+
+  resetGame() {
+    const { width, height } = this.scale;
+    const groundY = height * this.GROUND_LEVEL;
+
+    this.gameStarted = false;
+    this.block.y = groundY - 200;
+    this.blockVelocityY = 0;
+    this.hoverOffset = 0;
+    this.isFlying = false;
+    this.score = 0;
+    this.scoreText.setText('0');
+
+    // Remove all candles
+    [...this.bottomCandles, ...this.topCandles].forEach(c => c.destroy());
+    this.bottomCandles = [];
+    this.topCandles = [];
+
+    // Add start text back
+    this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
+      fontSize: Math.min(width * 0.08, 32) + 'px',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: width * 0.8 }
+    }).setOrigin(0.5);
   }
 
   update(time: number, delta: number) {
@@ -192,17 +232,20 @@ class MainScene extends Phaser.Scene {
       this.blockVelocityY = 0;
     }
 
-    // Spawn new candles
-    if (time > this.nextCandleTime) {
-      this.spawnCandles();
-      this.nextCandleTime = time + this.candleSpawnInterval;
-    }
+    // Track if we've passed any candles this frame
+    let passedCandle = false;
 
     // Update all candles
     const updateCandles = (candles: Phaser.GameObjects.Rectangle[]) => {
       for (let i = candles.length - 1; i >= 0; i--) {
         const candle = candles[i];
+        const oldX = candle.x;
         candle.x -= this.moveSpeed * deltaSeconds;
+
+        // Check if we've passed this candle
+        if (oldX > this.block.x && candle.x <= this.block.x) {
+          passedCandle = true;
+        }
 
         // Remove candles that are off screen
         if (candle.x < -50) {
@@ -226,30 +269,17 @@ class MainScene extends Phaser.Scene {
     if (updateCandles(this.bottomCandles) || updateCandles(this.topCandles)) {
       return; // Stop updating if collision occurred
     }
-  }
 
-  resetGame() {
-    const { width, height } = this.scale;
-    const groundY = height * this.GROUND_LEVEL;
+    // If we passed a candle pair, update the score
+    if (passedCandle) {
+      this.updateScore();
+    }
 
-    this.gameStarted = false;
-    this.block.y = groundY - 200;
-    this.blockVelocityY = 0;
-    this.hoverOffset = 0;
-    this.isFlying = false;
-
-    // Remove all candles
-    [...this.bottomCandles, ...this.topCandles].forEach(c => c.destroy());
-    this.bottomCandles = [];
-    this.topCandles = [];
-
-    // Add start text back
-    this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
-      fontSize: Math.min(width * 0.08, 32) + 'px',
-      color: '#ffffff',
-      align: 'center',
-      wordWrap: { width: width * 0.8 }
-    }).setOrigin(0.5);
+    // Spawn new candles
+    if (time > this.nextCandleTime) {
+      this.spawnCandles();
+      this.nextCandleTime = time + this.candleSpawnInterval;
+    }
   }
 }
 
