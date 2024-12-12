@@ -5,7 +5,6 @@ import Phaser from 'phaser';
 
 class MainScene extends Phaser.Scene {
   private block!: Phaser.GameObjects.Rectangle & Phaser.GameObjects.Components.Transform;
-  private isJumping: boolean = false;
   private jumpVelocity: number = -400;
   private gravity: number = 800;
   private blockVelocityY: number = 0;
@@ -29,10 +28,7 @@ class MainScene extends Phaser.Scene {
   }
 
   jump() {
-    if (!this.isJumping) {
-      this.blockVelocityY = this.jumpVelocity;
-      this.isJumping = true;
-    }
+    this.blockVelocityY = this.jumpVelocity;
   }
 
   update(time: number, delta: number) {
@@ -41,11 +37,10 @@ class MainScene extends Phaser.Scene {
     this.blockVelocityY += this.gravity * (delta / 1000);
     this.block.y += this.blockVelocityY * (delta / 1000);
 
-    // Check if block has landed
+    // Keep block within screen bounds
     if (this.block.y > height * 0.75) {
       this.block.y = height * 0.75;
       this.blockVelocityY = 0;
-      this.isJumping = false;
     }
   }
 }
