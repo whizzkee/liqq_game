@@ -6,23 +6,29 @@ import Phaser from 'phaser';
 class MainScene extends Phaser.Scene {
   private block!: Phaser.GameObjects.Rectangle & Phaser.GameObjects.Components.Transform;
   private background!: Phaser.GameObjects.TileSprite;
-  private candles: Phaser.GameObjects.Rectangle[] = [];
+  private bottomCandles: Phaser.GameObjects.Rectangle[] = [];
+  private topCandles: Phaser.GameObjects.Rectangle[] = [];
   private nextCandleTime: number = 0;
-  private candleSpawnInterval: number = 2000; // Spawn a new candle every 2 seconds
-  private jumpVelocity: number = -400;
-  private gravity: number = 800;
+  private candleSpawnInterval: number = 2000;
+  private flyForce: number = -300;
+  private gravity: number = 600;
   private blockVelocityY: number = 0;
   private moveSpeed: number = 300;
   private gameStarted: boolean = false;
   private startText!: Phaser.GameObjects.Text;
   private hoverOffset: number = 0;
-  private readonly HOVER_SPEED: number = 2; // Speed of hover animation
-  private readonly HOVER_AMPLITUDE: number = 20; // Height of hover
+  private readonly HOVER_SPEED: number = 2;
+  private readonly HOVER_AMPLITUDE: number = 20;
+  private readonly GROUND_LEVEL: number = 0.85;
+  private readonly CEILING_LEVEL: number = 0.05;
+  private readonly BLOCK_SIZE: number = 50;
+  private readonly MIN_GAP_SIZE: number = 150; // Minimum gap between candles
+  private isFlying: boolean = false;
 
   constructor() {
     super({ key: 'MainScene' });
-    // Bind the jump method to maintain correct 'this' context
-    this.jump = this.jump.bind(this);
+    this.fly = this.fly.bind(this);
+    this.stopFlying = this.stopFlying.bind(this);
   }
 
   create() {
@@ -34,7 +40,14 @@ class MainScene extends Phaser.Scene {
     this.background.setOrigin(0, 0);
     
     // Create a rectangle as our block
-    this.block = this.add.rectangle(width * 0.3, height * 0.6, 50, 50, 0x00bfff);
+    const groundY = height * this.GROUND_LEVEL;
+    this.block = this.add.rectangle(width * 0.3, groundY - 200, this.BLOCK_SIZE, this.BLOCK_SIZE, 0x00bfff);
+
+    // Draw ground and ceiling lines
+    const ground = this.add.rectangle(width / 2, groundY, width, 2, 0x666666);
+    ground.setOrigin(0.5, 0);
+    const ceiling = this.add.rectangle(width / 2, height * this.CEILING_LEVEL, width, 2, 0x666666);
+    ceiling.setOrigin(0.5, 1);
 
     // Add start text
     this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
@@ -44,11 +57,13 @@ class MainScene extends Phaser.Scene {
       wordWrap: { width: width * 0.8 }
     }).setOrigin(0.5);
 
-    // Add keyboard input
-    this.input!.keyboard!.on('keydown-SPACE', this.startGame, this);
+    // Add keyboard input for flying
+    this.input!.keyboard!.on('keydown-SPACE', this.fly, this);
+    this.input!.keyboard!.on('keyup-SPACE', this.stopFlying, this);
 
-    // Add touch/mouse input
-    this.input!.on('pointerdown', this.startGame, this);
+    // Add touch/mouse input for flying
+    this.input!.on('pointerdown', this.fly, this);
+    this.input!.on('pointerup', this.stopFlying, this);
   }
 
   createGradientTexture() {
@@ -81,43 +96,73 @@ class MainScene extends Phaser.Scene {
     return textureKey;
   }
 
-  startGame() {
-    if (!this.gameStarted) {
-      this.gameStarted = true;
-      this.startText.destroy();
-    } else {
-      this.jump();
-    }
-  }
-
-  spawnCandle() {
+  spawnCandles() {
     if (!this.gameStarted) return;
     
     const { width, height } = this.scale;
-    const candleHeight = Phaser.Math.Between(100, 200); // Random height between 100 and 200
-    const candle = this.add.rectangle(
-      width + 25, // Start just off the right side of the screen
-      height * 0.75 - candleHeight / 2, // Align bottom with ground
-      50,
-      candleHeight,
-      0x00ff00 // Green color
+    const groundY = height * this.GROUND_LEVEL;
+    const ceilingY = height * this.CEILING_LEVEL;
+    const playAreaHeight = groundY - ceilingY;
+
+    // Calculate random gap position and ensure it's within bounds
+    const minGapY = ceilingY + this.MIN_GAP_SIZE / 2;
+    const maxGapY = groundY - this.MIN_GAP_SIZE / 2;
+    const gapCenterY = Phaser.Math.Between(
+      Math.ceil(minGapY),
+      Math.floor(maxGapY)
     );
-    this.candles.push(candle);
+
+    // Create candles with guaranteed gap
+    const topCandleHeight = (gapCenterY - this.MIN_GAP_SIZE / 2) - ceilingY;
+    const bottomCandleHeight = groundY - (gapCenterY + this.MIN_GAP_SIZE / 2);
+
+    // Spawn bottom (green) candle if it has height
+    if (bottomCandleHeight > 0) {
+      const bottomCandle = this.add.rectangle(
+        width + 25,
+        groundY - bottomCandleHeight / 2,
+        50,
+        bottomCandleHeight,
+        0x00ff00
+      );
+      this.bottomCandles.push(bottomCandle);
+    }
+
+    // Spawn top (red) candle if it has height
+    if (topCandleHeight > 0) {
+      const topCandle = this.add.rectangle(
+        width + 25,
+        ceilingY + topCandleHeight / 2,
+        50,
+        topCandleHeight,
+        0xff0000
+      );
+      this.topCandles.push(topCandle);
+    }
   }
 
-  jump() {
-    if (!this.gameStarted) return;
-    this.blockVelocityY = this.jumpVelocity;
+  fly() {
+    if (!this.gameStarted) {
+      this.gameStarted = true;
+      this.startText.destroy();
+      return;
+    }
+    this.isFlying = true;
+  }
+
+  stopFlying() {
+    this.isFlying = false;
   }
 
   update(time: number, delta: number) {
     const deltaSeconds = delta / 1000;
     const { height } = this.scale;
+    const groundY = height * this.GROUND_LEVEL;
 
     if (!this.gameStarted) {
       // Hover animation when game hasn't started
       this.hoverOffset += this.HOVER_SPEED * deltaSeconds;
-      const hoverY = height * 0.6 + Math.sin(this.hoverOffset) * this.HOVER_AMPLITUDE;
+      const hoverY = groundY - 200 + Math.sin(this.hoverOffset) * this.HOVER_AMPLITUDE;
       this.block.y = hoverY;
       return;
     }
@@ -125,56 +170,84 @@ class MainScene extends Phaser.Scene {
     // Scroll background
     this.background.tilePositionX += this.moveSpeed * deltaSeconds;
 
-    // Apply gravity
-    this.blockVelocityY += this.gravity * deltaSeconds;
+    // Apply flying force and gravity
+    if (this.isFlying) {
+      this.blockVelocityY = this.flyForce;
+    } else {
+      this.blockVelocityY += this.gravity * deltaSeconds;
+    }
+    
+    // Apply velocity
     this.block.y += this.blockVelocityY * deltaSeconds;
 
     // Keep block within screen bounds
-    if (this.block.y > height * 0.75) {
-      this.block.y = height * 0.75;
+    if (this.block.y > groundY - 25) {
+      this.block.y = groundY - 25;
+      this.blockVelocityY = 0;
+    }
+    if (this.block.y < height * this.CEILING_LEVEL + 25) {
+      this.block.y = height * this.CEILING_LEVEL + 25;
       this.blockVelocityY = 0;
     }
 
     // Spawn new candles
     if (time > this.nextCandleTime) {
-      this.spawnCandle();
+      this.spawnCandles();
       this.nextCandleTime = time + this.candleSpawnInterval;
     }
 
-    // Update candles
-    for (let i = this.candles.length - 1; i >= 0; i--) {
-      const candle = this.candles[i];
-      candle.x -= this.moveSpeed * deltaSeconds;
+    // Update all candles
+    const updateCandles = (candles: Phaser.GameObjects.Rectangle[]) => {
+      for (let i = candles.length - 1; i >= 0; i--) {
+        const candle = candles[i];
+        candle.x -= this.moveSpeed * deltaSeconds;
 
-      // Remove candles that are off screen
-      if (candle.x < -50) {
-        candle.destroy();
-        this.candles.splice(i, 1);
-        continue;
-      }
+        // Remove candles that are off screen
+        if (candle.x < -50) {
+          candle.destroy();
+          candles.splice(i, 1);
+          continue;
+        }
 
-      // Check for collision with block
-      const blockBounds = this.block.getBounds();
-      const candleBounds = candle.getBounds();
-      if (Phaser.Geom.Rectangle.Overlaps(blockBounds, candleBounds)) {
-        // Reset game
-        this.gameStarted = false;
-        this.block.y = height * 0.6;
-        this.blockVelocityY = 0;
-        this.hoverOffset = 0;
-        // Remove all candles
-        this.candles.forEach(c => c.destroy());
-        this.candles = [];
-        // Add start text back
-        const { width } = this.scale;
-        this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
-          fontSize: Math.min(width * 0.08, 32) + 'px',
-          color: '#ffffff',
-          align: 'center',
-          wordWrap: { width: width * 0.8 }
-        }).setOrigin(0.5);
+        // Check for collision with block
+        const blockBounds = this.block.getBounds();
+        const candleBounds = candle.getBounds();
+        if (Phaser.Geom.Rectangle.Overlaps(blockBounds, candleBounds)) {
+          this.resetGame();
+          return true; // Collision occurred
+        }
       }
+      return false;
+    };
+
+    // Update both sets of candles
+    if (updateCandles(this.bottomCandles) || updateCandles(this.topCandles)) {
+      return; // Stop updating if collision occurred
     }
+  }
+
+  resetGame() {
+    const { width, height } = this.scale;
+    const groundY = height * this.GROUND_LEVEL;
+
+    this.gameStarted = false;
+    this.block.y = groundY - 200;
+    this.blockVelocityY = 0;
+    this.hoverOffset = 0;
+    this.isFlying = false;
+
+    // Remove all candles
+    [...this.bottomCandles, ...this.topCandles].forEach(c => c.destroy());
+    this.bottomCandles = [];
+    this.topCandles = [];
+
+    // Add start text back
+    this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
+      fontSize: Math.min(width * 0.08, 32) + 'px',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: width * 0.8 }
+    }).setOrigin(0.5);
   }
 }
 
