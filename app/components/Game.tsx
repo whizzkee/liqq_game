@@ -9,11 +9,11 @@ class MainScene extends Phaser.Scene {
   private bottomCandles: Phaser.GameObjects.Rectangle[] = [];
   private topCandles: Phaser.GameObjects.Rectangle[] = [];
   private nextCandleTime: number = 0;
-  private candleSpawnInterval: number = 2000;
-  private flyForce: number = -300;
-  private gravity: number = 600;
+  private candleSpawnInterval: number = 3000;
+  private flyForce: number = -350; // Moderate upward force for controlled flaps
+  private gravity: number = 900; // Stronger gravity for more natural falling
   private blockVelocityY: number = 0;
-  private moveSpeed: number = 300;
+  private moveSpeed: number = 200;
   private gameStarted: boolean = false;
   private startText!: Phaser.GameObjects.Text;
   private hoverOffset: number = 0;
@@ -22,7 +22,7 @@ class MainScene extends Phaser.Scene {
   private readonly GROUND_LEVEL: number = 0.85;
   private readonly CEILING_LEVEL: number = 0.05;
   private readonly BLOCK_SIZE: number = 50;
-  private readonly MIN_GAP_SIZE: number = 150; // Minimum gap between candles
+  private readonly MIN_GAP_SIZE: number = 180;
   private isFlying: boolean = false;
 
   constructor() {
@@ -171,9 +171,12 @@ class MainScene extends Phaser.Scene {
 
     // Apply flying force and gravity
     if (this.isFlying) {
+      // Quick flap upward
       this.blockVelocityY = this.flyForce;
+      this.isFlying = false; // Reset flying state immediately for "flap" effect
     } else {
-      this.blockVelocityY += this.gravity * deltaSeconds;
+      // Natural falling with speed limit
+      this.blockVelocityY = Math.min(this.blockVelocityY + this.gravity * deltaSeconds, 400);
     }
     
     // Apply velocity
