@@ -17,8 +17,9 @@ class MainScene extends Phaser.Scene {
   }
 
   create() {
+    const { width, height } = this.scale;
     // Create a rectangle as our block
-    this.block = this.add.rectangle(400, 300, 50, 50, 0x00ff00);
+    this.block = this.add.rectangle(width / 2, height / 2, 50, 50, 0x00ff00);
 
     // Add keyboard input
     this.input!.keyboard!.on('keydown-SPACE', this.jump, this);
@@ -35,13 +36,14 @@ class MainScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    const { height } = this.scale;
     // Apply gravity
     this.blockVelocityY += this.gravity * (delta / 1000);
     this.block.y += this.blockVelocityY * (delta / 1000);
 
     // Check if block has landed
-    if (this.block.y > 300) {
-      this.block.y = 300;
+    if (this.block.y > height * 0.75) {
+      this.block.y = height * 0.75;
       this.blockVelocityY = 0;
       this.isJumping = false;
     }
@@ -57,8 +59,13 @@ export default function Game() {
       const config: Phaser.Types.Core.GameConfig = {
         type: Phaser.AUTO,
         parent: gameRef.current,
-        width: 800,
-        height: 600,
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+          width: 360,
+          height: 640,
+          zoom: 1
+        },
         backgroundColor: '#000000',
         scene: MainScene,
         physics: {
@@ -79,5 +86,21 @@ export default function Game() {
     };
   }, []);
 
-  return <div ref={gameRef} style={{ width: '100%', height: '100%' }} />;
+  return (
+    <div 
+      ref={gameRef} 
+      style={{ 
+        width: '100%', 
+        height: '100%',
+        touchAction: 'none',
+        overflow: 'hidden',
+        backgroundColor: '#000000',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0
+      }} 
+    />
+  );
 }
