@@ -13,6 +13,11 @@ class MainScene extends Phaser.Scene {
   private gravity: number = 800;
   private blockVelocityY: number = 0;
   private moveSpeed: number = 300;
+  private gameStarted: boolean = false;
+  private startText!: Phaser.GameObjects.Text;
+  private hoverOffset: number = 0;
+  private readonly HOVER_SPEED: number = 2; // Speed of hover animation
+  private readonly HOVER_AMPLITUDE: number = 20; // Height of hover
 
   constructor() {
     super({ key: 'MainScene' });
@@ -29,13 +34,21 @@ class MainScene extends Phaser.Scene {
     this.background.setOrigin(0, 0);
     
     // Create a rectangle as our block
-    this.block = this.add.rectangle(width * 0.3, height / 2, 50, 50, 0x00bfff);
+    this.block = this.add.rectangle(width * 0.3, height * 0.6, 50, 50, 0x00bfff);
+
+    // Add start text
+    this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
+      fontSize: Math.min(width * 0.08, 32) + 'px',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: width * 0.8 }
+    }).setOrigin(0.5);
 
     // Add keyboard input
-    this.input!.keyboard!.on('keydown-SPACE', this.jump, this);
+    this.input!.keyboard!.on('keydown-SPACE', this.startGame, this);
 
     // Add touch/mouse input
-    this.input!.on('pointerdown', this.jump, this);
+    this.input!.on('pointerdown', this.startGame, this);
   }
 
   createGradientTexture() {
@@ -68,7 +81,18 @@ class MainScene extends Phaser.Scene {
     return textureKey;
   }
 
+  startGame() {
+    if (!this.gameStarted) {
+      this.gameStarted = true;
+      this.startText.destroy();
+    } else {
+      this.jump();
+    }
+  }
+
   spawnCandle() {
+    if (!this.gameStarted) return;
+    
     const { width, height } = this.scale;
     const candleHeight = Phaser.Math.Between(100, 200); // Random height between 100 and 200
     const candle = this.add.rectangle(
@@ -82,12 +106,21 @@ class MainScene extends Phaser.Scene {
   }
 
   jump() {
+    if (!this.gameStarted) return;
     this.blockVelocityY = this.jumpVelocity;
   }
 
   update(time: number, delta: number) {
     const deltaSeconds = delta / 1000;
     const { height } = this.scale;
+
+    if (!this.gameStarted) {
+      // Hover animation when game hasn't started
+      this.hoverOffset += this.HOVER_SPEED * deltaSeconds;
+      const hoverY = height * 0.6 + Math.sin(this.hoverOffset) * this.HOVER_AMPLITUDE;
+      this.block.y = hoverY;
+      return;
+    }
 
     // Scroll background
     this.background.tilePositionX += this.moveSpeed * deltaSeconds;
@@ -124,8 +157,22 @@ class MainScene extends Phaser.Scene {
       const blockBounds = this.block.getBounds();
       const candleBounds = candle.getBounds();
       if (Phaser.Geom.Rectangle.Overlaps(blockBounds, candleBounds)) {
-        // Reset game (you can add more game over logic here)
-        this.scene.restart();
+        // Reset game
+        this.gameStarted = false;
+        this.block.y = height * 0.6;
+        this.blockVelocityY = 0;
+        this.hoverOffset = 0;
+        // Remove all candles
+        this.candles.forEach(c => c.destroy());
+        this.candles = [];
+        // Add start text back
+        const { width } = this.scale;
+        this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
+          fontSize: Math.min(width * 0.08, 32) + 'px',
+          color: '#ffffff',
+          align: 'center',
+          wordWrap: { width: width * 0.8 }
+        }).setOrigin(0.5);
       }
     }
   }
