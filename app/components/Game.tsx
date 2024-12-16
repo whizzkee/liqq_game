@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import Phaser from 'phaser';
 
 class MainScene extends Phaser.Scene {
@@ -26,11 +26,18 @@ class MainScene extends Phaser.Scene {
   private readonly BLOCK_SIZE: number = 50;
   private readonly MIN_GAP_SIZE: number = 180;
   private isFlying: boolean = false;
+  private userId?: string | null;
+  private chatId?: string | null;
 
-  constructor() {
+  constructor(userId?: string | null, chatId?: string | null) {
     super({ key: 'MainScene' });
+    this.userId = userId;
+    this.chatId = chatId;
     this.fly = this.fly.bind(this);
     this.stopFlying = this.stopFlying.bind(this);
+  }
+
+  init() {
   }
 
   create() {
@@ -193,6 +200,34 @@ class MainScene extends Phaser.Scene {
     }).setOrigin(0.5);
   }
 
+  handleGameOver() {
+    if (this.userId && this.chatId) {
+      // @ts-expect-error - Telegram WebApp types
+      if (window.Telegram?.WebApp) {
+        // Send the score to Telegram
+        fetch('/api/score', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: this.userId,
+            chatId: this.chatId,
+            score: this.score
+          })
+        }).catch(console.error);
+      }
+    }
+    
+    // Reset game state
+    this.gameStarted = false;
+    this.score = 0;
+    this.block.setPosition(180, 320);
+    this.blockVelocityY = 0;
+    this.startText.setVisible(true);
+    this.updateScore();
+  }
+
   update(time: number, delta: number) {
     const deltaSeconds = delta / 1000;
     const { height } = this.scale;
@@ -258,7 +293,7 @@ class MainScene extends Phaser.Scene {
         const blockBounds = this.block.getBounds();
         const candleBounds = candle.getBounds();
         if (Phaser.Geom.Rectangle.Overlaps(blockBounds, candleBounds)) {
-          this.resetGame();
+          this.handleGameOver();
           return true; // Collision occurred
         }
       }
@@ -283,57 +318,46 @@ class MainScene extends Phaser.Scene {
   }
 }
 
-export default function Game() {
-  const gameRef = useRef<HTMLDivElement>(null);
-  const game = useRef<Phaser.Game | null>(null);
+interface GameProps {
+  userId?: string | null;
+  chatId?: string | null;
+}
 
+export default function Game({ userId, chatId }: GameProps) {
   useEffect(() => {
-    if (gameRef.current && !game.current) {
-      const config: Phaser.Types.Core.GameConfig = {
-        type: Phaser.AUTO,
-        parent: gameRef.current,
-        scale: {
-          mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_BOTH,
-          width: 360,
-          height: 640,
-          zoom: 1
-        },
-        backgroundColor: '#000000',
-        scene: MainScene,
-        physics: {
-          default: 'arcade',
-          arcade: {
-            gravity: { x: 0, y: 0 },
-            debug: false
-          }
-        }
-      };
+    if (typeof window === 'undefined') return;
 
-      game.current = new Phaser.Game(config);
-    }
+    const config: Phaser.Types.Core.GameConfig = {
+      type: Phaser.AUTO,
+      parent: 'game-container',
+      width: 800,
+      height: 600,
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: 800,
+        height: 600,
+        zoom: 1
+      },
+      backgroundColor: '#000000',
+      scene: new MainScene(userId, chatId),
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { x: 0, y: 0 },
+          debug: false
+        }
+      }
+    };
+
+    const gameInstance = new Phaser.Game(config);
 
     return () => {
-      game.current?.destroy(true);
-      game.current = null;
+      gameInstance.destroy(true);
     };
-  }, []);
+  }, [userId, chatId]);
 
   return (
-    <div 
-      ref={gameRef} 
-      style={{ 
-        width: '100%', 
-        height: '100%',
-        touchAction: 'none',
-        overflow: 'hidden',
-        backgroundColor: '#000000',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0
-      }} 
-    />
+    <div id="game-container" className="w-full h-full" />
   );
 }
