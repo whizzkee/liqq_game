@@ -2,14 +2,14 @@
 
 import dynamic from 'next/dynamic';
 
-const Game = dynamic(() => import('./components/Game'), {
+const GameContainer = dynamic(() => import('./components/GameContainer'), {
   ssr: false
 });
 
 export default function Home() {
   return (
     <div className="h-[100dvh] w-screen">
-      <Game />
+      <GameContainer />
     </div>
   );
 }
