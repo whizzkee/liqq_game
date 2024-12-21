@@ -1,7 +1,20 @@
 'use client';
 
+import * as Phaser from 'phaser';
 import { useEffect } from 'react';
-import Phaser from 'phaser';
+
+// Import TelegramWebApp interface
+interface TelegramWebApp {
+  ready: () => void;
+}
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp: TelegramWebApp;
+    };
+  }
+}
 
 class MainScene extends Phaser.Scene {
   private block!: Phaser.GameObjects.Rectangle & Phaser.GameObjects.Components.Transform;
@@ -191,6 +204,7 @@ class MainScene extends Phaser.Scene {
     this.bottomCandles = [];
     this.topCandles = [];
 
+
     // Add start text back
     this.startText = this.add.text(width / 2, height * 0.4, 'Press Space\nor Tap to Start', {
       fontSize: Math.min(width * 0.08, 32) + 'px',
@@ -202,7 +216,6 @@ class MainScene extends Phaser.Scene {
 
   handleGameOver() {
     if (this.userId && this.chatId) {
-      // @ts-expect-error - Telegram WebApp types
       if (window.Telegram?.WebApp) {
         // Send the score to Telegram
         fetch('/api/score', {
